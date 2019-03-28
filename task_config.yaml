@@ -1,12 +1,12 @@
 task:
   # The name of the task
-  task_name: msra
+  task_name: weibo
   # The input data directory
-  data_dir: msra
+  data_dir: weibo
   # bert pre-trained model directory
-  bert_model_dir: bert-pretrained/chinese_L-12_H-768_A-12
+  bert_model_dir: bert-pretrained/chinese_L-12_H-768_A-12/
   # The output directory where the model predictions and checkpoints will be written
-  output_dir: /home/put/models/msra
+  output_dir: pre-trained-model/model_weibo/
   # Specify the ckeckpoint to load
   checkpoint: ~
   # Whether you are using an uncased model or not
@@ -19,11 +19,11 @@ train:
   # Whether do training in this run
   do: true
   # Total batch size for training
-  batch_size: 25
+  batch_size: 10
   # The initial learning rate for Adam
   learning_rate: !!float 2e-5
   # Total number of training epochs to perform
-  epochs: 7
+  epochs: 100
   # Proportion of training to perform linear learning rate warmup for
   warmup_proportion: 0.1
   # Number of updates steps to accumulate before performing a backward/update pass

@@ -15,6 +15,8 @@ from pytorch_pretrained_bert.tokenization import BertTokenizer
 from pytorch_pretrained_bert.modeling import BertPreTrainedModel, BertModel
 from pytorch_pretrained_bert.optimization import BertAdam
 
+os.environ["CUDA_VISIBLE_DEVICES"] = "6"
+
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
                     datefmt='%m/%d/%Y %H:%M:%S',
                     level=logging.INFO)
@@ -83,7 +85,7 @@ class DataProcessor(object):
         examples = []
         units = []
         labels = []
-        for index, line in enumerate(codecs.open(data_file, encoding='utf-8')):
+        for index, line in enumerate(codecs.open(data_file, 'r', encoding='utf-8')):
             if not line.strip():
                 guid = "%s-%d" % (set_type, index)
                 examples.append(InputExample(guid=guid, units=units, labels=labels))
@@ -279,6 +281,40 @@ def warmup_linear(x, warmup=0.002):
     return 1.0 - x
 
 
+def get_perf_metric(eval_path, config, best_f1):
+    """
+    checked
+    Evalute the result file and get the new f1 value
+    :param name: name of the model
+    :param best_f1: the current best f1 value
+    :return: new best f1 value, the new f1 value, whether the new best f1 value is updated
+    """
+    should_save = False
+    new_f1 = 0.0
+
+    # eval_path = Constants.Eval_Folder
+    # eval_tmp_folder = Constants.Eval_Temp_Folder
+    # eval_script = Constants.Eval_Script
+
+    # os.path.join(eval_path, "%s.predict" % config['predict']['dataset'])
+    prediction_file = os.path.join(eval_path, "%s.predict" % config['predict']['dataset'])
+    score_file = os.path.join(eval_path, "%s.score" % config['predict']['dataset'])
+    eval_script = "output/eval.pl"
+
+    os.system('perl %s <%s >%s' % (eval_script, prediction_file, score_file))
+
+    evaluation_lines = [line.rstrip() for line in codecs.open(score_file, 'r', 'utf8')]
+
+    for i, line in enumerate(evaluation_lines):
+        if i == 1:
+            new_f1 = float(line.strip().split()[-1])
+            if new_f1 > best_f1:
+                best_f1 = new_f1
+                should_save = True
+
+    return new_f1, should_save
+
+
 def main(yaml_file):
 
     with open(yaml_file) as f:
@@ -309,7 +345,7 @@ def main(yaml_file):
         if config['task']['checkpoint']:
             model_file = config['task']['checkpoint']
         else:
-            model_file = os.path.join(config['task']['output_dir'], sorted(ckpts, key=lambda x: int(x[len('checkpoint-'):]))[-1])
+            model_file = os.path.join(config['task']['output_dir'], sorted(ckpts, key=lambda x: int(x[len('checkpoint'):]))[-1])
         logging.info('Load %s' % model_file)
         checkpoint = torch.load(model_file, map_location='cpu')
         start_epoch = checkpoint['epoch']+1
@@ -324,6 +360,7 @@ def main(yaml_file):
         model = BertForNER.from_pretrained(config['task']['bert_model_dir'], num_labels=len(label_list))
 
     tokenizer = BertTokenizer.from_pretrained(config['task']['bert_model_dir'], do_lower_case=lower_case)
+    ids_to_tokens = tokenizer.ids_to_tokens
 
     model.to(device)
 
@@ -354,7 +391,7 @@ def main(yaml_file):
         ]
         optimizer = BertAdam(optimizer_grouped_parameters, lr=config['train']['learning_rate'], warmup=config['train']['warmup_proportion'], t_total=num_train_steps)
 
-        train_features = convert_examples_to_features(train_examples, max_seq_length, tokenizer, config['task']['standard'], label_list)
+        train_features= convert_examples_to_features(train_examples, max_seq_length, tokenizer, config['task']['standard'], label_list)
 
         logger.info("***** Running training *****")
         logger.info("  Num examples = %d", len(train_examples))
@@ -372,8 +409,8 @@ def main(yaml_file):
         model.train()
         global_step = int(
             len(train_examples) / config['train']['batch_size'] / config['train']['gradient_accumulation_steps'] * start_epoch)
-        for epoch in trange(start_epoch, config['train']['epochs'], desc="Epoch"):
-            for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration")):
+        for epoch in trange(start_epoch, config['train']['epochs'], desc="Epoch", ascii=True):
+            for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration", ascii=True)):
                 batch = tuple(t.to(device) for t in batch)
                 input_ids, segment_ids, input_mask, predict_mask, one_hot_labels = batch
 
@@ -389,54 +426,65 @@ def main(yaml_file):
                     optimizer.zero_grad()
                     global_step += 1
 
-            # Save a checkpoint
+            # Save a checkpoint-0
             model_to_save = model.module if hasattr(model, 'module') else model  # Only save the model it-self
             torch.save({'epoch': epoch, 'model_state': model_to_save.state_dict(), 'max_seq_length': max_seq_length,
                         'lower_case': lower_case, 'label_list': label_list},
                        os.path.join(config['task']['output_dir'], 'checkpoint-%d' % epoch))
 
-    if config['predict']['do']:
-        if config['predict']['dataset'] == 'train':
-            predict_examples = processor.get_train_examples(config['task']['data_dir'])
-        elif config['predict']['dataset'] == 'dev':
-            predict_examples = processor.get_dev_examples(config['task']['data_dir'])
-        elif config['predict']['dataset'] == 'test':
-            predict_examples = processor.get_test_examples(config['task']['data_dir'])
-        else:
-            raise ValueError("The dataset %s cannot be predicted." % config['predict']['dataset'])
+            if config['predict']['do']:
+                if config['predict']['dataset'] == 'train':
+                    predict_examples = processor.get_train_examples(config['task']['data_dir'])
+                elif config['predict']['dataset'] == 'dev':
+                    predict_examples = processor.get_dev_examples(config['task']['data_dir'])
+                elif config['predict']['dataset'] == 'test':
+                    predict_examples = processor.get_test_examples(config['task']['data_dir'])
+                else:
+                    raise ValueError("The dataset %s cannot be predicted." % config['predict']['dataset'])
 
-        predict_features = convert_examples_to_features(predict_examples, max_seq_length, tokenizer, config['task']['standard'], label_list)
+                predict_features = convert_examples_to_features(predict_examples, max_seq_length, tokenizer, config['task']['standard'], label_list)
 
-        logger.info("***** Running prediction *****")
-        logger.info("  Num examples = %d", len(predict_examples))
-        logger.info("  Batch size = %d", config['predict']['batch_size'])
-        all_input_ids = torch.tensor([f.input_ids for f in predict_features], dtype=torch.long)
-        all_segment_ids = torch.tensor([f.segment_ids for f in predict_features], dtype=torch.long)
-        all_input_mask = torch.tensor([f.input_mask for f in predict_features], dtype=torch.long)
-        predict_data = TensorDataset(all_input_ids, all_segment_ids, all_input_mask)
-        # Run prediction for full data
-        predict_sampler = SequentialSampler(predict_data)
-        predict_dataloader = DataLoader(predict_data, sampler=predict_sampler, batch_size=config['predict']['batch_size'])
-        model.eval()
-        predictions = []
-        for batch in predict_dataloader:
-            batch = tuple(t.to(device) for t in batch)
-            input_ids, segment_ids, input_mask = batch
-            logits = model(input_ids, segment_ids, input_mask)
-            logits = logits.detach().cpu().numpy()
-            predictions.extend(np.argmax(logits, -1).tolist())
+                logger.info("***** Running prediction *****")
+                logger.info("  Num examples = %d", len(predict_examples))
+                logger.info("  Batch size = %d", config['predict']['batch_size'])
+                all_input_ids = torch.tensor([f.input_ids for f in predict_features], dtype=torch.long)
+                all_segment_ids = torch.tensor([f.segment_ids for f in predict_features], dtype=torch.long)
+                all_input_mask = torch.tensor([f.input_mask for f in predict_features], dtype=torch.long)
+                predict_data = TensorDataset(all_input_ids, all_segment_ids, all_input_mask)
+                # Run prediction for full data
+                predict_sampler = SequentialSampler(predict_data)
+                predict_dataloader = DataLoader(predict_data, sampler=predict_sampler, batch_size=config['predict']['batch_size'])
+                model.eval()
+                predictions = []
+                for batch in predict_dataloader:
+                    batch = tuple(t.to(device) for t in batch)
+                    input_ids, segment_ids, input_mask = batch
+                    logits = model(input_ids, segment_ids, input_mask)
+                    logits = logits.detach().cpu().numpy()
+                    predictions.extend(np.argmax(logits, -1).tolist())
 
-        writer = codecs.open(os.path.join(config['task']['output_dir'], "%s.predict" % config['predict']['dataset']), 'w', encoding='utf-8')
-        for predict_line, feature in zip(predictions, predict_features):
-            predict_labels = []
-            for index, label_id in enumerate(predict_line[:sum(feature.input_mask)]):
-                if feature.predict_mask[index] == 1:
-                    predict_labels.append(label_list[label_id])
-            writer.write(' '.join(predict_labels)+'\n')
-        writer.close()
+                writer = codecs.open(os.path.join(config['task']['output_dir'], "%s.predict" % config['predict']['dataset']), 'w', encoding='utf-8')
+                predict_labels = []
+                for predict_line, feature in zip(predictions, predict_features):
+                    true_tags = np.argmax(feature.one_hot_labels, 1)
+                    for index, label_id in enumerate(predict_line[:sum(feature.input_mask)]):
+                        if feature.predict_mask[index] == 1:
+                            # predict_labels.append(label_list[label_id])
+                            str_token = ids_to_tokens[feature.input_ids[index]]
+                            true_tag = label_list[true_tags[index]]
+                            pred_tag = label_list[label_id]
+                            line = ' '.join([str_token, true_tag, pred_tag])
+                            predict_labels.append(line)
+                writer.write('\n'.join(predict_labels))
+                eval_path = config['task']['output_dir']
+                new_F, save = get_perf_metric(eval_path, config, 0.0)
+                print("Epoch{0}, test_F:{1}".format(epoch, new_F))
+
+                writer.close()
 
 
 if __name__ == "__main__":
+    sys.argv = ["", "task_config.yaml"]
     if len(sys.argv) > 1 and os.path.exists(sys.argv[1]):
         main(sys.argv[1])
     else:

@@ -49,10 +49,10 @@ class NJUNER:
         if not os.path.exists(model_dir):
             logging.error("%s is not a valid path." % model_dir)
             exit(1)
-        if len(set(['bert_config.json', 'checkpoint', 'vocab.txt']) - set(os.listdir(model_dir))) > 0:
+        if len(set(['bert_config.json', 'checkpoint-0', 'vocab.txt']) - set(os.listdir(model_dir))) > 0:
             logging.error('%s not a valid model directory', model_dir)
             exit(1)
-        checkpoint = torch.load(os.path.join(model_dir, 'checkpoint'), map_location='cpu')
+        checkpoint = torch.load(os.path.join(model_dir, 'checkpoint-0'), map_location='cpu')
         self._max_seq_length = checkpoint['max_seq_length']
         self._label_list = ['O', 'B-PER', 'I-PER', 'B-LOC', 'I-LOC', 'B-ORG', 'I-ORG', '[CLS]', '[SEP]', 'Space']
         logger.info("Loading the model")

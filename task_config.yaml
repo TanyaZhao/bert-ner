@@ -2,11 +2,12 @@ task:
   # The name of the task
   task_name: weibo
   # The input data directory
-  data_dir: weibo
+  data_dir: data/weibo
   # bert pre-trained model directory
   bert_model_dir: bert-pretrained/chinese_L-12_H-768_A-12/
   # The output directory where the model predictions and checkpoints will be written
   output_dir: pre-trained-model/model_weibo/
+  log_dir: log/
   # Specify the ckeckpoint to load
   checkpoint: ~
   # Whether you are using an uncased model or not

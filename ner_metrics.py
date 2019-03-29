@@ -68,17 +68,17 @@ class SpanBasedF1Measure:
             precision_key = "precision" + "-" + tag
             recall_key = "recall" + "-" + tag
             f1_key = "f1-measure" + "-" + tag
-            all_metrics[precision_key] = precision
-            all_metrics[recall_key] = recall
-            all_metrics[f1_key] = f1_measure
+            all_metrics[precision_key] = round(precision, 2)
+            all_metrics[recall_key] = round(recall, 2)
+            all_metrics[f1_key] = round(f1_measure, 2)
 
         # Compute the precision, recall and f1 for all spans jointly.
         precision, recall, f1_measure = self._compute_metrics(sum(self._true_positives.values()),
                                                               sum(self._false_positives.values()),
                                                               sum(self._false_negatives.values()))
-        all_metrics["precision-overall"] = precision
-        all_metrics["recall-overall"] = recall
-        all_metrics["f1-measure-overall"] = f1_measure
+        all_metrics["precision-overall"] = round(precision, 2)
+        all_metrics["recall-overall"] = round(recall, 2)
+        all_metrics["f1-measure-overall"] = round(f1_measure, 2)
         return all_metrics
 
     @staticmethod
@@ -159,10 +159,13 @@ class SpanBasedF1Measure:
 
 if __name__ == '__main__':
     predictions, gold_labels = [], []
-    for line in open(sys.argv[1]):
-        predictions.append(line.strip().split())
-    for line in open(sys.argv[2]):
-        gold_labels.append(line.strip().split())
+    # for line in open(sys.argv[1]):
+    #     predictions.append(line.strip().split())
+    # for line in open(sys.argv[2]):
+    #     gold_labels.append(line.strip().split())
+
+    # predictions = [['O','O','I-LOC','I-LOC'], ['O','I-LOC','I-LOC','O']]
+    # gold_labels = [['O','O','O','O'], ['O','I-LOC','I-LOC','O']]
     measure = SpanBasedF1Measure()
     measure(predictions, gold_labels)
     metrics = measure.get_metric()

@@ -167,7 +167,7 @@ class BertEmbeddings(nn.Module):
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
-        # any TensorFlow checkpoint file
+        # any TensorFlow checkpoint-0 file
         self.LayerNorm = BertLayerNorm(config.hidden_size, eps=1e-12)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
@@ -435,12 +435,12 @@ class PreTrainedBertModel(nn.Module):
     @classmethod
     def from_pretrained(cls, pretrained_model_name, state_dict=None, cache_dir=None, *inputs, **kwargs):
         """
-        Instantiate a PreTrainedBertModel from a pre-trained model file or a pytorch state dict.
-        Download and cache the pre-trained model file if needed.
+        Instantiate a PreTrainedBertModel from a pre-trained-model file or a pytorch state dict.
+        Download and cache the pre-trained-model file if needed.
 
         Params:
             pretrained_model_name: either:
-                - a str with the name of a pre-trained model to load selected in the list of:
+                - a str with the name of a pre-trained-model to load selected in the list of:
                     . `bert-base-uncased`
                     . `bert-large-uncased`
                     . `bert-base-cased`
@@ -991,13 +991,13 @@ class BertForQuestionAnswering(PreTrainedBertModel):
     Params:
         `config`: either
             - a BertConfig class instance with the configuration to build a new model, or
-            - a str with the name of a pre-trained model to load selected in the list of:
+            - a str with the name of a pre-trained-model to load selected in the list of:
                 . `bert-base-uncased`
                 . `bert-large-uncased`
                 . `bert-base-cased`
                 . `bert-base-multilingual`
                 . `bert-base-chinese`
-                The pre-trained model will be downloaded and cached if needed.
+                The pre-trained-model will be downloaded and cached if needed.
 
     Inputs:
         `input_ids`: a torch.LongTensor of shape [batch_size, sequence_length]

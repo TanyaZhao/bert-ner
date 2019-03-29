@@ -90,8 +90,8 @@ class BertTokenizer(object):
     @classmethod
     def from_pretrained(cls, pretrained_model_name, cache_dir=None, *inputs, **kwargs):
         """
-        Instantiate a PreTrainedBertModel from a pre-trained model file.
-        Download and cache the pre-trained model file if needed.
+        Instantiate a PreTrainedBertModel from a pre-trained-model file.
+        Download and cache the pre-trained-model file if needed.
         """
         
         vocab_file = os.path.join(pretrained_model_name, VOCAB_NAME)

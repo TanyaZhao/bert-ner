@@ -10,12 +10,13 @@ from tqdm import tqdm, trange
 import numpy as np
 import torch
 from torch.utils.data import TensorDataset, DataLoader, RandomSampler, SequentialSampler
-
+from datetime import datetime
 from pytorch_pretrained_bert.tokenization import BertTokenizer
 from pytorch_pretrained_bert.modeling import BertPreTrainedModel, BertModel
 from pytorch_pretrained_bert.optimization import BertAdam
+from ner_metrics import SpanBasedF1Measure
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "6"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
                     datefmt='%m/%d/%Y %H:%M:%S',
@@ -320,6 +321,9 @@ def main(yaml_file):
     with open(yaml_file) as f:
         config = yaml.load(f.read())
 
+    log_file = os.path.join(config['task']['log_dir'],
+                            "{0}-{1}.log".format(config['predict']['dataset'], datetime.now().strftime('%Y%m%d%H%M%S')))
+
     if not config['train']['do'] and not config['predict']['do']:
         raise ValueError("At least do training or do predicting in a run.")
 
@@ -391,7 +395,7 @@ def main(yaml_file):
         ]
         optimizer = BertAdam(optimizer_grouped_parameters, lr=config['train']['learning_rate'], warmup=config['train']['warmup_proportion'], t_total=num_train_steps)
 
-        train_features= convert_examples_to_features(train_examples, max_seq_length, tokenizer, config['task']['standard'], label_list)
+        train_features = convert_examples_to_features(train_examples, max_seq_length, tokenizer, config['task']['standard'], label_list)
 
         logger.info("***** Running training *****")
         logger.info("  Num examples = %d", len(train_examples))
@@ -426,7 +430,9 @@ def main(yaml_file):
                     optimizer.zero_grad()
                     global_step += 1
 
-            # Save a checkpoint-0
+                break
+
+            # Save a checkpoint
             model_to_save = model.module if hasattr(model, 'module') else model  # Only save the model it-self
             torch.save({'epoch': epoch, 'model_state': model_to_save.state_dict(), 'max_seq_length': max_seq_length,
                         'lower_case': lower_case, 'label_list': label_list},
@@ -464,21 +470,38 @@ def main(yaml_file):
                     predictions.extend(np.argmax(logits, -1).tolist())
 
                 writer = codecs.open(os.path.join(config['task']['output_dir'], "%s.predict" % config['predict']['dataset']), 'w', encoding='utf-8')
-                predict_labels = []
+                predict_lines = []
+                gold_labels = []  # list of list
+                predict_labels = []  # list of list
                 for predict_line, feature in zip(predictions, predict_features):
                     true_tags = np.argmax(feature.one_hot_labels, 1)
+                    predict_label = []
+                    gold_label = []
                     for index, label_id in enumerate(predict_line[:sum(feature.input_mask)]):
                         if feature.predict_mask[index] == 1:
                             # predict_labels.append(label_list[label_id])
                             str_token = ids_to_tokens[feature.input_ids[index]]
                             true_tag = label_list[true_tags[index]]
                             pred_tag = label_list[label_id]
+                            predict_label.append(pred_tag)
+                            gold_label.append(true_tag)
                             line = ' '.join([str_token, true_tag, pred_tag])
-                            predict_labels.append(line)
-                writer.write('\n'.join(predict_labels))
-                eval_path = config['task']['output_dir']
-                new_F, save = get_perf_metric(eval_path, config, 0.0)
-                print("Epoch{0}, test_F:{1}".format(epoch, new_F))
+                            predict_lines.append(line)
+                    predict_labels.append(predict_label)
+                    gold_labels.append(gold_label)
+                writer.write('\n'.join(predict_lines))
+
+                # evaluate
+                measure = SpanBasedF1Measure()
+                measure(predict_labels, gold_labels)
+                metrics = measure.get_metric()
+
+                with codecs.open(log_file, 'w', encoding='utf-8') as fw:
+                    fw.write("Epoch {}: ".format(epoch) + str(metrics))
+
+                # eval_path = config['task']['output_dir']
+                # new_F, save = get_perf_metric(eval_path, config, 0.0)
+
 
                 writer.close()
 

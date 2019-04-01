@@ -6,7 +6,7 @@ task:
   # bert pre-trained model directory
   bert_model_dir: bert-pretrained/chinese_L-12_H-768_A-12
   # The output directory where the model predictions and checkpoints will be written
-  output_dir: /home/put/models/msra
+  output_dir: pre-trained-model/model_weibo/origin_model/
   log_dir: log/
   # Specify the ckeckpoint to load
   checkpoint: ~

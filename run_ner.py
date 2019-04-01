@@ -376,8 +376,8 @@ def main(yaml_file):
         model.train()
         global_step = int(
             len(train_examples) / config['train']['batch_size'] / config['train']['gradient_accumulation_steps'] * start_epoch)
-        for epoch in trange(start_epoch, config['train']['epochs'], desc="Epoch"):
-            for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration")):
+        for epoch in trange(start_epoch, config['train']['epochs'], desc="Epoch", ascii=True):
+            for step, batch in enumerate(tqdm(train_dataloader, desc="Iteration", ascii=True)):
                 batch = tuple(t.to(device) for t in batch)
                 input_ids, segment_ids, input_mask, predict_mask, one_hot_labels = batch
 
@@ -399,61 +399,61 @@ def main(yaml_file):
                         'lower_case': lower_case, 'label_list': label_list},
                        os.path.join(config['task']['output_dir'], 'checkpoint-%d' % epoch))
 
-    if config['predict']['do']:
-        if config['predict']['dataset'] == 'train':
-            predict_examples = processor.get_train_examples(config['task']['data_dir'])
-        elif config['predict']['dataset'] == 'dev':
-            predict_examples = processor.get_dev_examples(config['task']['data_dir'])
-        elif config['predict']['dataset'] == 'test':
-            predict_examples = processor.get_test_examples(config['task']['data_dir'])
-        else:
-            raise ValueError("The dataset %s cannot be predicted." % config['predict']['dataset'])
+            if config['predict']['do']:
+                if config['predict']['dataset'] == 'train':
+                    predict_examples = processor.get_train_examples(config['task']['data_dir'])
+                elif config['predict']['dataset'] == 'dev':
+                    predict_examples = processor.get_dev_examples(config['task']['data_dir'])
+                elif config['predict']['dataset'] == 'test':
+                    predict_examples = processor.get_test_examples(config['task']['data_dir'])
+                else:
+                    raise ValueError("The dataset %s cannot be predicted." % config['predict']['dataset'])
 
-        predict_features = convert_examples_to_features(predict_examples, max_seq_length, tokenizer, config['task']['standard'], label_list)
+                predict_features = convert_examples_to_features(predict_examples, max_seq_length, tokenizer, config['task']['standard'], label_list)
 
-        logger.info("***** Running prediction *****")
-        logger.info("  Num examples = %d", len(predict_examples))
-        logger.info("  Batch size = %d", config['predict']['batch_size'])
-        all_input_ids = torch.tensor([f.input_ids for f in predict_features], dtype=torch.long)
-        all_segment_ids = torch.tensor([f.segment_ids for f in predict_features], dtype=torch.long)
-        all_input_mask = torch.tensor([f.input_mask for f in predict_features], dtype=torch.long)
-        all_label_ids = torch.tensor([f.label_ids for f in predict_features], dtype=torch.long)
-        predict_data = TensorDataset(all_input_ids, all_segment_ids, all_input_mask, all_label_ids)
-        # Run prediction for full data
-        predict_sampler = SequentialSampler(predict_data)
-        predict_dataloader = DataLoader(predict_data, sampler=predict_sampler, batch_size=config['predict']['batch_size'])
-        model.eval()
-        predictions = []
-        for batch in predict_dataloader:
-            batch = tuple(t.to(device) for t in batch)
-            input_ids, segment_ids, input_mask, label_ids = batch
-            logits = model(input_ids, segment_ids, input_mask)
-            logits = logits.detach().cpu().numpy()
-            predictions.extend(np.argmax(logits, -1).tolist())
+                logger.info("***** Running prediction *****")
+                logger.info("  Num examples = %d", len(predict_examples))
+                logger.info("  Batch size = %d", config['predict']['batch_size'])
+                all_input_ids = torch.tensor([f.input_ids for f in predict_features], dtype=torch.long)
+                all_segment_ids = torch.tensor([f.segment_ids for f in predict_features], dtype=torch.long)
+                all_input_mask = torch.tensor([f.input_mask for f in predict_features], dtype=torch.long)
+                all_label_ids = torch.tensor([f.label_ids for f in predict_features], dtype=torch.long)
+                predict_data = TensorDataset(all_input_ids, all_segment_ids, all_input_mask, all_label_ids)
+                # Run prediction for full data
+                predict_sampler = SequentialSampler(predict_data)
+                predict_dataloader = DataLoader(predict_data, sampler=predict_sampler, batch_size=config['predict']['batch_size'])
+                model.eval()
+                predictions = []
+                for batch in predict_dataloader:
+                    batch = tuple(t.to(device) for t in batch)
+                    input_ids, segment_ids, input_mask, label_ids = batch
+                    logits = model(input_ids, segment_ids, input_mask)
+                    logits = logits.detach().cpu().numpy()
+                    predictions.extend(np.argmax(logits, -1).tolist())
 
-        writer = codecs.open(os.path.join(config['task']['output_dir'], "%s.predict" % config['predict']['dataset']), 'w', encoding='utf-8')
-        golden_label_ids = all_label_ids.data.cpu().numpy()
-        predict_labels = []
-        golden_labels = []
-        for batch_predict_ids, batch_golden_ids, feature in zip(predictions, golden_label_ids, predict_features):
-            batch_predict_labels = []
-            batch_golden_labels = []
-            for index, label_id in enumerate(batch_predict_ids[:sum(feature.input_mask)]):
-                if feature.predict_mask[index] == 1:
-                    batch_predict_labels.append(label_list[label_id])
-                    batch_golden_labels.append(label_list[batch_golden_ids[index]])
-            writer.write(' '.join(batch_predict_labels)+'\n')
-            predict_labels.append(batch_predict_labels)
-            golden_labels.append(batch_golden_labels)
-        writer.close()
+                writer = codecs.open(os.path.join(config['task']['output_dir'], "%s.predict" % config['predict']['dataset']), 'w', encoding='utf-8')
+                golden_label_ids = all_label_ids.data.cpu().numpy()
+                predict_labels = []
+                golden_labels = []
+                for batch_predict_ids, batch_golden_ids, feature in zip(predictions, golden_label_ids, predict_features):
+                    batch_predict_labels = []
+                    batch_golden_labels = []
+                    for index, label_id in enumerate(batch_predict_ids[:sum(feature.input_mask)]):
+                        if feature.predict_mask[index] == 1:
+                            batch_predict_labels.append(label_list[label_id])
+                            batch_golden_labels.append(label_list[batch_golden_ids[index]])
+                    writer.write(' '.join(batch_predict_labels)+'\n')
+                    predict_labels.append(batch_predict_labels)
+                    golden_labels.append(batch_golden_labels)
+                writer.close()
 
-        measure = SpanBasedF1Measure()
-        measure(predict_labels, golden_labels)
-        metrics = measure.get_metric()
+                measure = SpanBasedF1Measure()
+                measure(predict_labels, golden_labels)
+                metrics = measure.get_metric()
 
-        with codecs.open(log_file, 'w', encoding='utf-8') as fw:
-            fw.write("Epoch {}: ".format(epoch) + str(metrics))
-        print("Epoch {}: ".format(epoch) + str(metrics))
+                with codecs.open(log_file, 'w', encoding='utf-8') as fw:
+                    fw.write("Epoch {}: ".format(epoch) + str(metrics))
+                print("Epoch {}: ".format(epoch) + str(metrics))
 
 
 if __name__ == "__main__":

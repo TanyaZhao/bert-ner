@@ -15,6 +15,10 @@ from pytorch_pretrained_bert.tokenization import BertTokenizer
 from pytorch_pretrained_bert.modeling import BertPreTrainedModel, BertModel
 from pytorch_pretrained_bert.optimization import BertAdam
 
+DEVICE = "3"
+os.environ["CUDA_VISIBLE_DEVICES"] = DEVICE
+print("gpu:{}".format(DEVICE))
+
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
                     datefmt='%m/%d/%Y %H:%M:%S',
                     level=logging.INFO)
@@ -451,7 +455,7 @@ def main(yaml_file):
                 measure(predict_labels, golden_labels)
                 metrics = measure.get_metric()
 
-                with codecs.open(log_file, 'w', encoding='utf-8') as fw:
+                with codecs.open(log_file, 'a', encoding='utf-8') as fw:
                     fw.write("Epoch {}: ".format(epoch) + str(metrics))
                 print("Epoch {}: ".format(epoch) + str(metrics))
 

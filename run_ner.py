@@ -15,7 +15,7 @@ from pytorch_pretrained_bert.tokenization import BertTokenizer
 from pytorch_pretrained_bert.modeling import BertPreTrainedModel, BertModel
 from pytorch_pretrained_bert.optimization import BertAdam
 
-DEVICE = "3"
+DEVICE = "4"
 os.environ["CUDA_VISIBLE_DEVICES"] = DEVICE
 print("gpu:{}".format(DEVICE))
 
@@ -155,13 +155,13 @@ class WeiboProcessor(DataProcessor):
 
 class ResumeProcessor(DataProcessor):
     def get_train_examples(self, data_dir):
-        return DataProcessor.create_examples_from_conll_format_file(os.path.join(data_dir, 'train.txt'), 'train')
+        return DataProcessor.create_examples_from_conll_format_file(os.path.join(data_dir, 'train_bio.txt'), 'train')
 
     def get_dev_examples(self, data_dir):
-        return DataProcessor.create_examples_from_conll_format_file(os.path.join(data_dir, 'dev.txt'), 'dev')
+        return DataProcessor.create_examples_from_conll_format_file(os.path.join(data_dir, 'dev_bio.txt'), 'dev')
 
     def get_test_examples(self, data_dir):
-        return DataProcessor.create_examples_from_conll_format_file(os.path.join(data_dir, 'test.txt'), 'test')
+        return DataProcessor.create_examples_from_conll_format_file(os.path.join(data_dir, 'test_bio.txt'), 'test')
 
     @staticmethod
     def get_labels():
@@ -172,19 +172,22 @@ class ResumeProcessor(DataProcessor):
 
 class MSRAProcessor(DataProcessor):
     def get_train_examples(self, data_dir):
-        return DataProcessor.create_examples(os.path.join(data_dir, 'train_content.txt'),
-                                             os.path.join(data_dir, 'train_label.txt'), 'train')
+        # return DataProcessor.create_examples(os.path.join(data_dir, 'train_content.txt'),
+        #                                      os.path.join(data_dir, 'train_label.txt'), 'train')
+        return DataProcessor.create_examples_from_conll_format_file(os.path.join(data_dir, 'train_bio.txt'), 'train')
 
     def get_dev_examples(self, data_dir):
         return None
 
     def get_test_examples(self, data_dir):
-        return DataProcessor.create_examples(os.path.join(data_dir, 'testright_content.txt'),
-                                             os.path.join(data_dir, 'testright_label.txt'), 'test')
+        # return DataProcessor.create_examples(os.path.join(data_dir, 'testright_content.txt'),
+        #                                      os.path.join(data_dir, 'testright_label.txt'), 'test')
+        return DataProcessor.create_examples_from_conll_format_file(os.path.join(data_dir, 'test_bio.txt'), 'test')
 
     @staticmethod
     def get_labels():
-        label_type = ['O', 'B-NR', 'I-NR', 'B-NS', 'I-NS', 'B-NT', 'I-NT']
+        # label_type = ['O', 'B-NR', 'I-NR', 'B-NS', 'I-NS', 'B-NT', 'I-NT']
+        label_type = ["O", "B-LOC", "I-LOC", "B-ORG", "I-ORG", "B-PER", "I-PER"]
         return label_type
 
 
@@ -290,7 +293,7 @@ def main(yaml_file):
         config = yaml.load(f.read())
 
     log_file = os.path.join(config['task']['log_dir'],
-                            "{0}-{1}.log".format(config['predict']['dataset'], datetime.now().strftime('%Y%m%d%H%M%S')))
+                            "{0}-{1}.log".format(config['task']['task_name'], datetime.now().strftime('%Y%m%d%H%M%S')))
 
     if not config['train']['do'] and not config['predict']['do']:
         raise ValueError("At least do training or do predicting in a run.")
@@ -456,7 +459,7 @@ def main(yaml_file):
                 metrics = measure.get_metric()
 
                 with codecs.open(log_file, 'a', encoding='utf-8') as fw:
-                    fw.write("Epoch {}: ".format(epoch) + str(metrics))
+                    fw.write("Epoch {}: ".format(epoch) + str(metrics) + "\n")
                 print("Epoch {}: ".format(epoch) + str(metrics))
 
 

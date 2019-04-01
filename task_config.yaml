@@ -1,8 +1,8 @@
 task:
   # The name of the task
-  task_name: msra
+  task_name: weibo
   # The input data directory
-  data_dir: msra
+  data_dir: data/weibo
   # bert pre-trained model directory
   bert_model_dir: bert-pretrained/chinese_L-12_H-768_A-12
   # The output directory where the model predictions and checkpoints will be written

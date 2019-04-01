@@ -6,11 +6,11 @@ import logging
 import random
 import yaml
 from tqdm import tqdm, trange
-
+from ner_metrics import SpanBasedF1Measure
 import numpy as np
 import torch
 from torch.utils.data import TensorDataset, DataLoader, RandomSampler, SequentialSampler
-
+from datetime import datetime
 from pytorch_pretrained_bert.tokenization import BertTokenizer
 from pytorch_pretrained_bert.modeling import BertPreTrainedModel, BertModel
 from pytorch_pretrained_bert.optimization import BertAdam
@@ -56,11 +56,12 @@ class InputExample(object):
 
 class InputFeatures(object):
 
-    def __init__(self, input_ids, segment_ids, input_mask, predict_mask, one_hot_labels):
+    def __init__(self, input_ids, segment_ids, input_mask, predict_mask, label_ids, one_hot_labels):
         self.input_ids = input_ids
         self.segment_ids = segment_ids
         self.input_mask = input_mask
         self.predict_mask = predict_mask
+        self.label_ids = label_ids
         self.one_hot_labels = one_hot_labels
 
 
@@ -269,7 +270,7 @@ def convert_examples_to_features(examples, max_seq_length, tokenizer, standard, 
         one_hot_labels = np.eye(len(label_list), dtype=np.float32)[label_ids]
 
         features.append(InputFeatures(input_ids=input_ids, segment_ids=segment_ids, input_mask=input_mask,
-                                      predict_mask=predict_mask, one_hot_labels=one_hot_labels))
+                                      predict_mask=predict_mask, label_ids=label_ids, one_hot_labels=one_hot_labels))
     return features
 
 
@@ -283,6 +284,9 @@ def main(yaml_file):
 
     with open(yaml_file) as f:
         config = yaml.load(f.read())
+
+    log_file = os.path.join(config['task']['log_dir'],
+                            "{0}-{1}.log".format(config['predict']['dataset'], datetime.now().strftime('%Y%m%d%H%M%S')))
 
     if not config['train']['do'] and not config['predict']['do']:
         raise ValueError("At least do training or do predicting in a run.")
@@ -413,7 +417,8 @@ def main(yaml_file):
         all_input_ids = torch.tensor([f.input_ids for f in predict_features], dtype=torch.long)
         all_segment_ids = torch.tensor([f.segment_ids for f in predict_features], dtype=torch.long)
         all_input_mask = torch.tensor([f.input_mask for f in predict_features], dtype=torch.long)
-        predict_data = TensorDataset(all_input_ids, all_segment_ids, all_input_mask)
+        all_label_ids = torch.tensor([f.label_ids for f in predict_features], dtype=torch.long)
+        predict_data = TensorDataset(all_input_ids, all_segment_ids, all_input_mask, all_label_ids)
         # Run prediction for full data
         predict_sampler = SequentialSampler(predict_data)
         predict_dataloader = DataLoader(predict_data, sampler=predict_sampler, batch_size=config['predict']['batch_size'])
@@ -421,19 +426,34 @@ def main(yaml_file):
         predictions = []
         for batch in predict_dataloader:
             batch = tuple(t.to(device) for t in batch)
-            input_ids, segment_ids, input_mask = batch
+            input_ids, segment_ids, input_mask, label_ids = batch
             logits = model(input_ids, segment_ids, input_mask)
             logits = logits.detach().cpu().numpy()
             predictions.extend(np.argmax(logits, -1).tolist())
 
         writer = codecs.open(os.path.join(config['task']['output_dir'], "%s.predict" % config['predict']['dataset']), 'w', encoding='utf-8')
-        for predict_line, feature in zip(predictions, predict_features):
-            predict_labels = []
-            for index, label_id in enumerate(predict_line[:sum(feature.input_mask)]):
+        golden_label_ids = all_label_ids.data.cpu().numpy()
+        predict_labels = []
+        golden_labels = []
+        for batch_predict_ids, batch_golden_ids, feature in zip(predictions, golden_label_ids, predict_features):
+            batch_predict_labels = []
+            batch_golden_labels = []
+            for index, label_id in enumerate(batch_predict_ids[:sum(feature.input_mask)]):
                 if feature.predict_mask[index] == 1:
-                    predict_labels.append(label_list[label_id])
-            writer.write(' '.join(predict_labels)+'\n')
+                    batch_predict_labels.append(label_list[label_id])
+                    batch_golden_labels.append(label_list[batch_golden_ids[index]])
+            writer.write(' '.join(batch_predict_labels)+'\n')
+            predict_labels.append(batch_predict_labels)
+            golden_labels.append(batch_golden_labels)
         writer.close()
+
+        measure = SpanBasedF1Measure()
+        measure(predict_labels, golden_labels)
+        metrics = measure.get_metric()
+
+        with codecs.open(log_file, 'w', encoding='utf-8') as fw:
+            fw.write("Epoch {}: ".format(epoch) + str(metrics))
+        print("Epoch {}: ".format(epoch) + str(metrics))
 
 
 if __name__ == "__main__":

@@ -457,6 +457,7 @@ def main(yaml_file):
 
 
 if __name__ == "__main__":
+    sys.argv = ["", "task_config.yaml"]
     if len(sys.argv) > 1 and os.path.exists(sys.argv[1]):
         main(sys.argv[1])
     else:

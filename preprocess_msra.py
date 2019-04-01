@@ -87,3 +87,8 @@ def preprocess(path, dataset):
         out_label.write(' '.join(labels)+'\n')
     out_content.close()
     out_label.close()
+
+if __name__ == "__main__":
+    preprocess(path="data/msra", dataset="train")
+    preprocess(path="data/msra", dataset="test")
+    print("OK!")

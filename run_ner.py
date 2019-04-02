@@ -14,8 +14,9 @@ from datetime import datetime
 from pytorch_pretrained_bert.tokenization import BertTokenizer
 from pytorch_pretrained_bert.modeling import BertPreTrainedModel, BertModel
 from pytorch_pretrained_bert.optimization import BertAdam
+from predict_metric import get_perf_metric
 
-DEVICE = "4"
+DEVICE = "3"
 os.environ["CUDA_VISIBLE_DEVICES"] = DEVICE
 print("gpu:{}".format(DEVICE))
 
@@ -399,6 +400,7 @@ def main(yaml_file):
                     optimizer.step()
                     optimizer.zero_grad()
                     global_step += 1
+                # break
 
             # Save a checkpoint
             model_to_save = model.module if hasattr(model, 'module') else model  # Only save the model it-self
@@ -442,6 +444,7 @@ def main(yaml_file):
                 golden_label_ids = all_label_ids.data.cpu().numpy()
                 predict_labels = []
                 golden_labels = []
+                lines = []
                 for batch_predict_ids, batch_golden_ids, feature in zip(predictions, golden_label_ids, predict_features):
                     batch_predict_labels = []
                     batch_golden_labels = []
@@ -449,9 +452,12 @@ def main(yaml_file):
                         if feature.predict_mask[index] == 1:
                             batch_predict_labels.append(label_list[label_id])
                             batch_golden_labels.append(label_list[batch_golden_ids[index]])
-                    writer.write(' '.join(batch_predict_labels)+'\n')
+                            line = " ".join(["X", label_list[batch_golden_ids[index]],label_list[label_id]])
+                            lines.append(line)
+                    lines.append("")
                     predict_labels.append(batch_predict_labels)
                     golden_labels.append(batch_golden_labels)
+                writer.write('\n'.join(lines))
                 writer.close()
 
                 measure = SpanBasedF1Measure()
@@ -461,6 +467,11 @@ def main(yaml_file):
                 with codecs.open(log_file, 'a', encoding='utf-8') as fw:
                     fw.write("Epoch {}: ".format(epoch) + str(metrics) + "\n")
                 print("Epoch {}: ".format(epoch) + str(metrics))
+
+                eval_path = config['task']['output_dir']
+                new_F, save = get_perf_metric(eval_path, config, 0.0)
+                print("Epoch {0}: [overall_f1:{1}]".format(epoch, str(new_F)))
+
 
 
 if __name__ == "__main__":

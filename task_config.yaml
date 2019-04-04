@@ -1,12 +1,12 @@
 task:
   # The name of the task
-  task_name: msra
+  task_name: resume_bert_param
   # The input data directory
-  data_dir: data/msra
+  data_dir: data/resume
   # bert pre-trained model directory
   bert_model_dir: bert-pretrained/chinese_L-12_H-768_A-12
   # The output directory where the model predictions and checkpoints will be written
-  output_dir: pre-trained-model/model_msra/batch10_model/
+  output_dir: pre-trained-model/model_resume/bert_param_model/
   log_dir: log/
   # Specify the ckeckpoint to load
   checkpoint: ~
@@ -20,9 +20,9 @@ train:
   # Whether do training in this run
   do: true
   # Total batch size for training
-  batch_size: 25
+  batch_size: 16
   # The initial learning rate for Adam
-  learning_rate: !!float 2e-5
+  learning_rate: !!float 5e-5
   # Total number of training epochs to perform
   epochs: 100
   # Proportion of training to perform linear learning rate warmup for
@@ -37,6 +37,6 @@ predict:
   # Which dataset to be predicted: train, dev or test
   dataset: test
   # Total batch size for predicting
-  batch_size: 25
+  batch_size: 16
 # Whether to use CUDA when available
 use_cuda: true

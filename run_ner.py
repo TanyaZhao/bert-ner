@@ -32,7 +32,7 @@ class BertForNER(BertPreTrainedModel):
         super(BertForNER, self).__init__(config)
         self.num_labels = num_labels
         self.bert = BertModel(config)
-        self.dropout = torch.nn.Dropout(0.2)
+        self.dropout = torch.nn.Dropout(0.1)
         self.hidden2label = torch.nn.Linear(config.hidden_size, num_labels)
         self.apply(self.init_bert_weights)
 
@@ -192,6 +192,22 @@ class MSRAProcessor(DataProcessor):
         return label_type
 
 
+class OntoNotesProcessor(DataProcessor):
+    def get_train_examples(self, data_dir):
+        return DataProcessor.create_examples_from_conll_format_file(os.path.join(data_dir, 'train_bio.txt'), 'train')
+
+    def get_dev_examples(self, data_dir):
+        return DataProcessor.create_examples_from_conll_format_file(os.path.join(data_dir, 'dev_bio.txt'), 'dev')
+
+    def get_test_examples(self, data_dir):
+        return DataProcessor.create_examples_from_conll_format_file(os.path.join(data_dir, 'test_bio.txt'), 'test')
+
+    @staticmethod
+    def get_labels():
+        label_type = ['O', 'B-GPE', 'I-GPE', 'B-PER', 'I-PER', 'B-LOC', 'I-LOC', 'B-ORG', 'I-ORG']
+        return label_type
+
+
 class PD98Processor(DataProcessor):
     def get_train_examples(self, data_dir):
         return DataProcessor.create_examples(os.path.join(data_dir, 'train_content.txt'),
@@ -215,7 +231,8 @@ processors = {
         "weibo": WeiboProcessor,
         "resume": ResumeProcessor,
         "msra": MSRAProcessor,
-        "pd98": PD98Processor
+        "pd98": PD98Processor,
+        "ontonotes_bigcnn": OntoNotesProcessor
 }
 
 
@@ -293,9 +310,6 @@ def main(yaml_file):
     with open(yaml_file) as f:
         config = yaml.load(f.read())
 
-    log_file = os.path.join(config['task']['log_dir'],
-                            "{0}-{1}.log".format(config['task']['task_name'], datetime.now().strftime('%Y%m%d%H%M%S')))
-
     if not config['train']['do'] and not config['predict']['do']:
         raise ValueError("At least do training or do predicting in a run.")
 
@@ -307,7 +321,10 @@ def main(yaml_file):
         use_gpu = False
     logger.info("device: {}".format(device))
 
-    task_name = config['task']['task_name'].lower()
+    task_name = (config['task']['task_name'].split("_"))[0].lower()
+    print("task: {}".format(task_name))
+    log_file = os.path.join(config['task']['log_dir'],
+                            "{0}-{1}.log".format(task_name, datetime.now().strftime('%Y%m%d%H%M%S')))
 
     if task_name not in processors:
         raise ValueError("Task not found: %s" % task_name)
@@ -317,23 +334,23 @@ def main(yaml_file):
 
     os.makedirs(config['task']['output_dir'], exist_ok=True)
     ckpts = [filename for filename in os.listdir(config['task']['output_dir']) if re.fullmatch('checkpoint-\d+', filename)]
-    if config['task']['checkpoint'] or ckpts:
-        if config['task']['checkpoint']:
-            model_file = config['task']['checkpoint']
-        else:
-            model_file = os.path.join(config['task']['output_dir'], sorted(ckpts, key=lambda x: int(x[len('checkpoint-'):]))[-1])
-        logging.info('Load %s' % model_file)
-        checkpoint = torch.load(model_file, map_location='cpu')
-        start_epoch = checkpoint['epoch']+1
-        max_seq_length = checkpoint['max_seq_length']
-        lower_case = checkpoint['lower_case']
-        model = BertForNER.from_pretrained(config['task']['bert_model_dir'], state_dict=checkpoint['model_state'],
-                                           num_labels=len(label_list))
-    else:
-        start_epoch = 0
-        max_seq_length = config['task']['max_seq_length']
-        lower_case = config['task']['lower_case']
-        model = BertForNER.from_pretrained(config['task']['bert_model_dir'], num_labels=len(label_list))
+    # if config['task']['checkpoint'] or ckpts:
+    #     if config['task']['checkpoint']:
+    #         model_file = config['task']['checkpoint']
+    #     else:
+    #         model_file = os.path.join(config['task']['output_dir'], sorted(ckpts, key=lambda x: int(x[len('checkpoint-'):]))[-1])
+    #     logging.info('Load %s' % model_file)
+    #     checkpoint = torch.load(model_file, map_location='cpu')
+    #     start_epoch = checkpoint['epoch']+1
+    #     max_seq_length = checkpoint['max_seq_length']
+    #     lower_case = checkpoint['lower_case']
+    #     model = BertForNER.from_pretrained(config['task']['bert_model_dir'], state_dict=checkpoint['model_state'],
+    #                                        num_labels=len(label_list))
+    # else:
+    start_epoch = 0
+    max_seq_length = config['task']['max_seq_length']
+    lower_case = config['task']['lower_case']
+    model = BertForNER.from_pretrained(config['task']['bert_model_dir'], num_labels=len(label_list))
 
     tokenizer = BertTokenizer.from_pretrained(config['task']['bert_model_dir'], do_lower_case=lower_case)
 
@@ -460,17 +477,21 @@ def main(yaml_file):
                 writer.write('\n'.join(lines))
                 writer.close()
 
-                measure = SpanBasedF1Measure()
-                measure(predict_labels, golden_labels)
-                metrics = measure.get_metric()
-
                 with codecs.open(log_file, 'a', encoding='utf-8') as fw:
-                    fw.write("Epoch {}: ".format(epoch) + str(metrics) + "\n")
-                print("Epoch {}: ".format(epoch) + str(metrics))
 
-                eval_path = config['task']['output_dir']
-                new_F, save = get_perf_metric(eval_path, config, 0.0)
-                print("Epoch {0}: [overall_f1:{1}]".format(epoch, str(new_F)))
+                    measure = SpanBasedF1Measure()
+                    measure(predict_labels, golden_labels)
+                    metrics = measure.get_metric()
+                    fw.write("Epoch {}: ".format(epoch) + str(metrics) + "\n")
+                    print("Epoch {}: ".format(epoch) + str(metrics))
+
+                    if config['task']['task_name'].startswith("weibo"):
+                        all_golden_labels = [golden_label for batch_golden_labels in golden_labels for golden_label in batch_golden_labels]
+                        all_predict_labels = [predict_label for batch_predict_labels in predict_labels for predict_label in batch_predict_labels]
+                        P_NAM, R_NAM, F1_NAM, P_NOM, R_NOM, F1_NOM = measure.get_NAM_NOM(all_golden_labels, all_predict_labels)
+                        nam_nom = {"P_NAM":P_NAM, "R_NAM":R_NAM, "F1_NAM":F1_NAM, "P_NOM":P_NOM, "R_NOM":R_NOM, "F1_NOM":F1_NOM}
+                        fw.write("Epoch {}: ".format(epoch) + str(nam_nom) + "\n\n")
+                        print("Epoch {}: ".format(epoch) + str(nam_nom))
 
 
 

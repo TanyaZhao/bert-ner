@@ -21,7 +21,7 @@ for f in files:
                 bio_tag = "I" + bioes_tag[idx_:]
             elif bioes_tag.startswith("S"):
                 idx_ = bioes_tag.index("-")
-                bio_tag = "B" + bioes_tag[idx_:]
+                bio_tag = "B" + bioes_tag[idx_:] ###
             else:
                 bio_tag = bioes_tag
             units.append((token, bio_tag))
